@@ -10,7 +10,7 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
-from transformers import BertTokenizer, DistilBertForSequenceClassification, get_linear_schedule_with_warmup
+from transformers import BertTokenizer, BertForSequenceClassification, get_linear_schedule_with_warmup
 from tqdm import tqdm
 import re
 # import nltk
@@ -203,7 +203,7 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
 # Initialize BERT model for sequence classification
-model = DistilBertForSequenceClassification.from_pretrained(
+model = BertForSequenceClassification.from_pretrained(
     'bert-base-uncased',
     num_labels=2,
     output_attentions=False,
@@ -228,24 +228,19 @@ scheduler = get_linear_schedule_with_warmup(
 
 
 # Training function
-def early_stopping(val_loss, best_val_loss, epochs_without_improvement, patience=3):
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        epochs_without_improvement = 0
-    else:
-        epochs_without_improvement += 1
+def binary_accuracy(preds, y):
+    # Используем torch.argmax для получения метки с максимальной вероятностью
+    rounded_preds = torch.argmax(preds, dim=1)
+    correct = (rounded_preds == y).float()
+    acc = correct.sum() / len(correct)
+    return acc
 
-    if epochs_without_improvement >= patience:
-        print("Early stopping triggered.")
-        return True, best_val_loss, epochs_without_improvement
-    return False, best_val_loss, epochs_without_improvement
 
-# Training function
+# Обучающая функция
 def train_model(model, train_loader, optimizer, scheduler, device):
     model.train()
     total_loss = 0
-    correct_preds = 0
-    total_preds = 0
+    total_acc = 0
 
     progress_bar = tqdm(train_loader, desc="Training", leave=True)
 
@@ -254,42 +249,40 @@ def train_model(model, train_loader, optimizer, scheduler, device):
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['label'].to(device)
 
-        # Clear gradients
+        # Обнуляем градиенты
         optimizer.zero_grad()
 
-        # Forward pass
+        # Прямой проход
         outputs = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels
         )
 
-        loss = outputs.loss
-        total_loss += loss.item()
+        logits = outputs.logits
+        loss = outputs.loss  # Вычисляем потери
+        acc = binary_accuracy(logits, labels)  # Вычисляем точность
 
-        # Backward pass
+        # Обратный проход
         loss.backward()
 
-        # Clip gradients to prevent exploding gradients
+        # Клипаем градиенты
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
-        # Update parameters
+        # Обновляем параметры
         optimizer.step()
 
-        # Update learning rate
+        # Обновляем скорость обучения
         scheduler.step()
 
-        # Calculate accuracy
-        _, preds = torch.max(outputs.logits, dim=1)
-        correct_preds += torch.sum(preds == labels)
-        total_preds += labels.size(0)
+        # Обновляем прогресс-бар
+        progress_bar.set_postfix({'loss': loss.item(), 'accuracy': acc.item()})
 
-        # Update progress bar
-        progress_bar.set_postfix({'loss': loss.item()})
+        total_loss += loss.item()
+        total_acc += acc.item()
 
-    avg_train_loss = total_loss / len(train_loader)
-    train_accuracy = correct_preds.double() / total_preds
-    return avg_train_loss, train_accuracy
+    # Возвращаем средние значения потерь и точности
+    return total_loss / len(train_loader), total_acc / len(train_loader)
 
 # Evaluation function
 def evaluate_model(model, test_loader, device):
@@ -352,8 +345,14 @@ def train_and_evaluate(model, train_loader, test_loader, optimizer, scheduler, d
         print(f"Test F1 Score: {f1:.4f}")
 
         # Early stopping check
-        stop_training, best_val_loss, epochs_without_improvement = early_stopping(test_loss, best_val_loss, epochs_without_improvement, patience)
-        if stop_training:
+        if test_loss < best_val_loss:
+            best_val_loss = test_loss
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+
+        if epochs_without_improvement >= patience:
+            print("Early stopping triggered.")
             break
 
         test_losses.append(test_loss)
@@ -369,40 +368,26 @@ def plot_training_results(train_losses, train_accuracies, test_losses, test_accu
     epochs = len(train_losses)
 
     # Create subplots for loss and accuracy
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # Plot Train and Test Loss
     ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss', color='tab:red')
-    ax1.plot(range(epochs), train_losses, label='Train Loss', color='tab:red')
-    ax1.plot(range(epochs), test_losses, label='Test Loss', color='tab:orange')
-    ax1.tick_params(axis='y', labelcolor='tab:red')
+    ax1.set_ylabel('Loss')
+    ax1.plot(range(1, epochs + 1), train_losses, label='Train Loss', color='#97a6c4')
+    ax1.plot(range(1, epochs + 1), test_losses, label='Test Loss', color='#384860')
+    ax1.legend(loc='upper left')
 
     # Create another y-axis for accuracy
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('Accuracy', color='tab:blue')
-    ax2.plot(range(epochs), test_accuracies, label='Test Accuracy', color='tab:blue')
-    ax2.plot(range(epochs), train_accuracies, label='Train Accuracy', color='tab:green')
-    ax2.tick_params(axis='y', labelcolor='tab:blue')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Accuracy')
+    ax2.plot(range(1, epochs + 1), test_accuracies, label='Test Accuracy', color='#97a6c4')
+    ax2.plot(range(1, epochs + 1), train_accuracies, label='Train Accuracy', color='#384860')
+    ax2.legend(loc='upper right')
 
     # Add a legend
     fig.tight_layout()
-    ax1.legend(loc='upper left')
-    ax2.legend(loc='upper right')
-
     # Show plot
     plt.title('Training and Test Metrics')
-    plt.show()
-
-    # Plot Accuracy
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(epochs), train_accuracies, marker='o', label='Train Accuracy', color='tab:green')
-    plt.plot(range(epochs), test_accuracies, marker='o', label='Test Accuracy', color='tab:blue')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.title('Train and Test Accuracy Over Epochs')
-    plt.grid(True)
-    plt.legend()
     plt.show()
 
 

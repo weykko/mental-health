@@ -168,3 +168,5 @@ cython_debug/
 .idea/
 
 /homework 3/data/
+/datasets
+/models

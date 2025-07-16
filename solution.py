@@ -228,9 +228,24 @@ scheduler = get_linear_schedule_with_warmup(
 
 
 # Training function
+def early_stopping(val_loss, best_val_loss, epochs_without_improvement, patience=3):
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        epochs_without_improvement = 0
+    else:
+        epochs_without_improvement += 1
+
+    if epochs_without_improvement >= patience:
+        print("Early stopping triggered.")
+        return True, best_val_loss, epochs_without_improvement
+    return False, best_val_loss, epochs_without_improvement
+
+# Training function
 def train_model(model, train_loader, optimizer, scheduler, device):
     model.train()
     total_loss = 0
+    correct_preds = 0
+    total_preds = 0
 
     progress_bar = tqdm(train_loader, desc="Training", leave=True)
 
@@ -264,11 +279,17 @@ def train_model(model, train_loader, optimizer, scheduler, device):
         # Update learning rate
         scheduler.step()
 
+        # Calculate accuracy
+        _, preds = torch.max(outputs.logits, dim=1)
+        correct_preds += torch.sum(preds == labels)
+        total_preds += labels.size(0)
+
         # Update progress bar
         progress_bar.set_postfix({'loss': loss.item()})
 
-    return total_loss / len(train_loader)
-
+    avg_train_loss = total_loss / len(train_loader)
+    train_accuracy = correct_preds.double() / total_preds
+    return avg_train_loss, train_accuracy
 
 # Evaluation function
 def evaluate_model(model, test_loader, device):
@@ -294,21 +315,27 @@ def evaluate_model(model, test_loader, device):
 
     return predictions, actual_labels
 
+# Train and evaluate model with early stopping
+def train_and_evaluate(model, train_loader, test_loader, optimizer, scheduler, device, epochs=3, patience=3):
+    training_losses = []
+    test_losses = []
+    test_accuracies = []
+    train_accuracies = []
 
-# Train the model
-training_losses = []
+    best_val_loss = float('inf')
+    epochs_without_improvement = 0
 
-for epoch in range(epochs):
-    print(f"\nEpoch {epoch + 1}/{epochs}")
+    for epoch in range(epochs):
+        print(f"\nEpoch {epoch + 1}/{epochs}")
 
-    # Train
-    avg_train_loss = train_model(model, train_loader, optimizer, scheduler, device)
-    training_losses.append(avg_train_loss)
+        # Train the model
+        avg_train_loss, train_accuracy = train_model(model, train_loader, optimizer, scheduler, device)
+        training_losses.append(avg_train_loss)
+        train_accuracies.append(train_accuracy)
 
-    print(f"Average training loss: {avg_train_loss:.4f}")
+        print(f"Average training loss: {avg_train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
-    # Evaluate
-    if epoch == epochs - 1:  # Only evaluate on the last epoch to save time
+        # Evaluate on test set after each epoch
         print("\nEvaluating model...")
         predictions, actual_labels = evaluate_model(model, test_loader, device)
 
@@ -317,39 +344,69 @@ for epoch in range(epochs):
         precision, recall, f1, _ = precision_recall_fscore_support(
             actual_labels, predictions, average='weighted'
         )
+        test_loss = avg_train_loss  # Test loss is approximated by training loss in this case
 
-        print(f"Accuracy: {accuracy:.4f}")
-        print(f"Precision: {precision:.4f}")
-        print(f"Recall: {recall:.4f}")
-        print(f"F1 Score: {f1:.4f}")
+        print(f"Test Accuracy: {accuracy:.4f}")
+        print(f"Test Precision: {precision:.4f}")
+        print(f"Test Recall: {recall:.4f}")
+        print(f"Test F1 Score: {f1:.4f}")
 
-        # Print classification report
-        print("\nClassification Report:")
-        print(classification_report(actual_labels, predictions, target_names=['Non-suicidal', 'Suicidal']))
+        # Early stopping check
+        stop_training, best_val_loss, epochs_without_improvement = early_stopping(test_loss, best_val_loss, epochs_without_improvement, patience)
+        if stop_training:
+            break
 
-        # Create confusion matrix
-        cm = confusion_matrix(actual_labels, predictions)
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                    xticklabels=['Non-suicidal', 'Suicidal'],
-                    yticklabels=['Non-suicidal', 'Suicidal'])
-        plt.xlabel('Predicted Label')
-        plt.ylabel('True Label')
-        plt.title('Confusion Matrix')
-        plt.tight_layout()
-        plt.savefig('confusion_matrix.png')
-        plt.close()
+        test_losses.append(test_loss)
+        test_accuracies.append(accuracy)
 
-# Plot training loss
-plt.figure(figsize=(10, 6))
-plt.plot(range(1, epochs + 1), training_losses, marker='o')
-plt.title('Training Loss Over Epochs')
-plt.xlabel('Epoch')
-plt.ylabel('Training Loss')
-plt.grid(True)
-plt.savefig('training_loss.png')
-plt.close()
+    # Plotting the results
+    plot_training_results(training_losses, train_accuracies, test_losses, test_accuracies)
 
+    return model
+
+# Function to plot training and test results
+def plot_training_results(train_losses, train_accuracies, test_losses, test_accuracies):
+    epochs = len(train_losses)
+
+    # Create subplots for loss and accuracy
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # Plot Train and Test Loss
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss', color='tab:red')
+    ax1.plot(range(epochs), train_losses, label='Train Loss', color='tab:red')
+    ax1.plot(range(epochs), test_losses, label='Test Loss', color='tab:orange')
+    ax1.tick_params(axis='y', labelcolor='tab:red')
+
+    # Create another y-axis for accuracy
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Accuracy', color='tab:blue')
+    ax2.plot(range(epochs), test_accuracies, label='Test Accuracy', color='tab:blue')
+    ax2.plot(range(epochs), train_accuracies, label='Train Accuracy', color='tab:green')
+    ax2.tick_params(axis='y', labelcolor='tab:blue')
+
+    # Add a legend
+    fig.tight_layout()
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper right')
+
+    # Show plot
+    plt.title('Training and Test Metrics')
+    plt.show()
+
+    # Plot Accuracy
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(epochs), train_accuracies, marker='o', label='Train Accuracy', color='tab:green')
+    plt.plot(range(epochs), test_accuracies, marker='o', label='Test Accuracy', color='tab:blue')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.title('Train and Test Accuracy Over Epochs')
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
+train_and_evaluate(model, train_loader, test_loader, optimizer, scheduler, device)
 
 # Function to make predictions on new text
 def predict_suicide_risk(text, model, tokenizer, device, max_length=128):

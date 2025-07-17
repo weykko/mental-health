@@ -287,8 +287,8 @@ def train_model(model, train_loader, optimizer, scheduler, device):
 # Evaluation function
 def evaluate_model(model, test_loader, device):
     model.eval()
-    predictions = []
-    actual_labels = []
+    total_loss = 0
+    total_acc = 0
 
     with torch.no_grad():
         for batch in tqdm(test_loader, desc="Evaluating"):
@@ -301,53 +301,54 @@ def evaluate_model(model, test_loader, device):
                 attention_mask=attention_mask
             )
 
-            _, preds = torch.max(outputs.logits, dim=1)
+            logits = outputs.logits
+            loss = outputs.loss
+            acc = binary_accuracy(logits, labels)
 
-            predictions.extend(preds.cpu().tolist())
-            actual_labels.extend(labels.cpu().tolist())
+            total_loss += loss.item()
+            total_acc += acc.item()
 
-    return predictions, actual_labels
+    return total_loss / len(test_loader), total_acc / len(test_loader)
 
 # Train and evaluate model with early stopping
 def train_and_evaluate(model, train_loader, test_loader, optimizer, scheduler, device, epochs=3, patience=3):
-    training_losses = []
-    test_losses = []
-    test_accuracies = []
-    train_accuracies = []
+    train_losses, train_accs = [], []
+    test_losses, test_accs = [], []
 
     best_val_loss = float('inf')
     epochs_without_improvement = 0
 
     for epoch in range(epochs):
         print(f"\nEpoch {epoch + 1}/{epochs}")
+        train_loss, train_acc = train_model(model, train_loader, optimizer, scheduler, device)
+        train_losses.append(train_loss)
+        train_accs.append(train_acc)
+        print(f"Train loss: {train_loss:.4f}, Train accuracy: {train_acc:.4f}")
 
-        # Train the model
-        avg_train_loss, train_accuracy = train_model(model, train_loader, optimizer, scheduler, device)
-        training_losses.append(avg_train_loss)
-        train_accuracies.append(train_accuracy)
-
-        print(f"Average training loss: {avg_train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
-
-        # Evaluate on test set after each epoch
         print("\nEvaluating model...")
-        predictions, actual_labels = evaluate_model(model, test_loader, device)
+        test_loss, test_acc = evaluate_model(model, test_loader, device)
+        test_losses.append(test_loss)
+        test_accs.append(test_acc)
+        print(f"Test loss: {train_loss:.4f}, Test accuracy: {train_acc:.4f}")
+
 
         # Calculate metrics
-        accuracy = accuracy_score(actual_labels, predictions)
-        precision, recall, f1, _ = precision_recall_fscore_support(
-            actual_labels, predictions, average='weighted'
-        )
-        test_loss = avg_train_loss  # Test loss is approximated by training loss in this case
-
-        print(f"Test Accuracy: {accuracy:.4f}")
-        print(f"Test Precision: {precision:.4f}")
-        print(f"Test Recall: {recall:.4f}")
-        print(f"Test F1 Score: {f1:.4f}")
+        # accuracy = accuracy_score(actual_labels, predictions)
+        # precision, recall, f1, _ = precision_recall_fscore_support(
+        #     actual_labels, predictions, average='weighted'
+        # )
+        # test_loss = avg_train_loss  # Test loss is approximated by training loss in this case
+        #
+        # print(f"Test Accuracy: {accuracy:.4f}")
+        # print(f"Test Precision: {precision:.4f}")
+        # print(f"Test Recall: {recall:.4f}")
+        # print(f"Test F1 Score: {f1:.4f}")
 
         # Early stopping check
         if test_loss < best_val_loss:
             best_val_loss = test_loss
             epochs_without_improvement = 0
+            save_model(model, tokenizer, "/model/")
         else:
             epochs_without_improvement += 1
 
@@ -355,17 +356,21 @@ def train_and_evaluate(model, train_loader, test_loader, optimizer, scheduler, d
             print("Early stopping triggered.")
             break
 
-        test_losses.append(test_loss)
-        test_accuracies.append(accuracy)
 
+    history = {
+        'train_losses': train_losses,
+        'train_accs': train_accs,
+        'test_losses': test_losses,
+        'test_accs': test_accs
+    }
     # Plotting the results
-    plot_training_results(training_losses, train_accuracies, test_losses, test_accuracies)
+    plot_training_results(history, "plots/train_history.png")
 
     return model
 
 # Function to plot training and test results
-def plot_training_results(train_losses, train_accuracies, test_losses, test_accuracies):
-    epochs = len(train_losses)
+def plot_training_results(history, path):
+    epochs = len(history['train_losses'])
 
     # Create subplots for loss and accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -373,21 +378,18 @@ def plot_training_results(train_losses, train_accuracies, test_losses, test_accu
     # Plot Train and Test Loss
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss')
-    ax1.plot(range(1, epochs + 1), train_losses, label='Train Loss', color='#97a6c4')
-    ax1.plot(range(1, epochs + 1), test_losses, label='Test Loss', color='#384860')
+    ax1.plot(range(1, epochs + 1), history['train_losses'], label='Train Loss', color='#97a6c4')
+    ax1.plot(range(1, epochs + 1), history['test_losses'], label='Test Loss', color='#384860')
     ax1.legend(loc='upper left')
 
     # Create another y-axis for accuracy
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Accuracy')
-    ax2.plot(range(1, epochs + 1), test_accuracies, label='Test Accuracy', color='#97a6c4')
-    ax2.plot(range(1, epochs + 1), train_accuracies, label='Train Accuracy', color='#384860')
+    ax2.plot(range(1, epochs + 1), history['train_accs'], label='Test Accuracy', color='#97a6c4')
+    ax2.plot(range(1, epochs + 1), history['test_accs'], label='Train Accuracy', color='#384860')
     ax2.legend(loc='upper right')
-
-    # Add a legend
     fig.tight_layout()
-    # Show plot
-    plt.title('Training and Test Metrics')
+    plt.savefig(path)
     plt.show()
 
 
@@ -449,17 +451,16 @@ print(f"Probability of suicidal: {result['suicidal_prob']:.4f}")
 print(f"Probability of non-suicidal: {result['non_suicidal_prob']:.4f}")
 
 # Save the model
-output_dir = 'models/'
-import os
+def save_model(model, tokenizer, output_dir):
+    import os
 
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-# Save model
-model.save_pretrained(output_dir)
-tokenizer.save_pretrained(output_dir)
+    model.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
 
-print(f"\nModel saved to {output_dir}")
+    print(f"\nModel saved to {output_dir}")
 
 
 # Define a function to analyze model predictions

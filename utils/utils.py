@@ -1,41 +1,70 @@
 import torch
 import re
 from matplotlib import pyplot as plt
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-from tqdm import tqdm
 
 
 def preprocess_text(text):
+    """
+    Предобработка текста перед подачей в модель.
+
+    Параметры:
+    text (str): Входной текст для обработки.
+
+    Возвращает:
+    str: Предобработанный текст.
+    """
     if not isinstance(text, str): return ""
 
-    # Convert to lowercase
+    # Преобразуем в нижний регистр
     text = text.lower()
 
-    # Remove URLs
+    # Удаляем URL-адреса
     text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
 
-    # Remove user mentions
+    # Удаляем упоминания пользователей (например, @username)
     text = re.sub(r'@\w+', '', text)
 
-    # Remove special characters and numbers
+    # Удаляем специальные символы и цифры
     text = re.sub(r'[^\w\s]', '', text)
     text = re.sub(r'\d+', '', text)
 
-    # Remove extra whitespace
+    # Убираем лишние пробелы
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
 
 
 def binary_accuracy(preds, y):
+    """
+    Вычисление точности для бинарной классификации.
+
+    Параметры:
+    preds (Tensor): Прогнозы модели (логиты).
+    y (Tensor): Истинные метки классов.
+
+    Возвращает:
+    float: Точность классификации.
+    """
     # Используем torch.argmax для получения метки с максимальной вероятностью
     rounded_preds = torch.argmax(preds, dim=1)
-    correct = (rounded_preds == y).float()
-    acc = correct.sum() / len(correct)
+    correct = (rounded_preds == y).float()  # Сравниваем предсказания с истинными метками
+    acc = correct.sum() / len(correct)  # Средняя точность
+
     return acc
 
 
 def save_model(model, tokenizer, output_dir):
+    """
+    Сохранение модели и токенизатора.
+
+    Параметры:
+    model (torch.nn.Module): Модель, которую нужно сохранить.
+    tokenizer (PreTrainedTokenizer): Токенизатор для сохранения.
+    output_dir (str): Путь к директории, куда будет сохранена модель.
+
+    Возвращает:
+    None
+    """
     import os
 
     if not os.path.exists(output_dir):
@@ -47,8 +76,17 @@ def save_model(model, tokenizer, output_dir):
     print(f"\nModel saved to {output_dir}")
 
 
-# Function to plot training and test results
 def plot_class_distribution(class_counts, path):
+    """
+    Построение графика распределения классов.
+
+    Параметры:
+    class_counts (pandas.Series): Количество сообщений по классам.
+    path (str): Путь для сохранения изображения.
+
+    Возвращает:
+    None
+    """
     fig, ax = plt.subplots()
 
     ax.bar(class_counts.index.values, class_counts.values, color=['#f76452', '#58db6e'], width=0.8)
@@ -61,15 +99,22 @@ def plot_class_distribution(class_counts, path):
     plt.show()
 
 
-def plot_training_results(history, path):
+def plot_training_history(history, path):
+    """
+    Построение графиков для потерь и точности в процессе обучения.
+
+    Параметры:
+    history (dict): История обучения, содержащая потери и точность для каждой эпохи.
+    path (str): Путь для сохранения изображения.
+
+    Возвращает:
+    None
+    """
     epochs = len(history['train_losses'])
 
-    # Create subplots for loss and accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    # Plot Train and Test Loss
     ax1.set_xlabel('Epoch')
-    # ax1.set_ylabel('Loss')
     ax1.plot(range(1, epochs + 1), history['train_losses'], label='Train Loss', color='#97a6c4')
     ax1.plot(range(1, epochs + 1), history['test_losses'], label='Test Loss', color='#384860')
     ax1.legend(loc='upper right', fontsize=12)
@@ -77,9 +122,7 @@ def plot_training_results(history, path):
     ax1.set_xticks(range(1, epochs + 1))
     ax1.set_title("Loss", fontsize=14)
 
-    # Create another y-axis for accuracy
     ax2.set_xlabel('Epoch')
-    # ax2.set_ylabel('Accuracy')
     ax2.plot(range(1, epochs + 1), history['train_accs'], label='Train Accuracy', color='#97a6c4')
     ax2.plot(range(1, epochs + 1), history['test_accs'], label='Test Accuracy', color='#384860')
     ax2.legend(loc='lower right', fontsize=12)

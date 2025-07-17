@@ -9,7 +9,7 @@ class DepressionDataset(Dataset):
     Параметры:
     texts (pandas.Series): Тексты сообщений.
     labels (pandas.Series): Метки классов (0 - не суицидальные, 1 - суицидальные).
-    tokenizer (PreTrainedTokenizer): Токенизатор для обработки текста.
+    tokenizer (transformers.PreTrainedTokenizer): Токенизатор для обработки текста.
     max_length (int): Максимальная длина последовательности для токенизации.
     """
 
@@ -65,7 +65,7 @@ def get_depression_loaders(X_train, y_train, X_test, y_test, tokenizer, max_leng
     y_train (pandas.Series): Метки классов обучающей выборки.
     X_test (pandas.Series): Тексты тестовой выборки.
     y_test (pandas.Series): Метки классов тестовой выборки.
-    tokenizer (PreTrainedTokenizer): Токенизатор для преобразования текста в числовое представление.
+    tokenizer (BertTokenizer): Токенизатор для преобразования текста в числовое представление.
     max_length (int): Максимальная длина токенизированных последовательностей.
     batch_size (int): Размер батча для загрузчиков данных.
 

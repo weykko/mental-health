@@ -2,18 +2,18 @@ import torch
 from sklearn.metrics import classification_report
 from tqdm import tqdm
 
-from utils.utils import binary_accuracy, save_model
+from utils.utils import binary_accuracy, save_model, plot_confusion_matrix
 
 
 def train_epoch(model, train_loader, optimizer, scheduler, device):
     """
-    Обучение модели за одну эпоху.
+    Обучение модели в эпоху.
 
     Параметры:
-    model (torch.nn.Module): Модель для обучения.
+    model (transformers.models.bert): Модель для обучения.
     train_loader (DataLoader): Загрузчик данных для обучения.
     optimizer (torch.optim.Optimizer): Оптимизатор для обновления весов.
-    scheduler (torch.optim.lr_scheduler._LRScheduler): Планировщик для обновления скорости обучения.
+    scheduler (torch.optim.lr_scheduler.LambdaLR): Планировщик для обновления скорости обучения.
     device (torch.device): Устройство для выполнения расчетов.
 
     Возвращает:
@@ -61,10 +61,10 @@ def train_epoch(model, train_loader, optimizer, scheduler, device):
 
 def test_epoch(model, test_loader, device):
     """
-    Оценка модели на тестовом наборе данных за одну эпоху.
+    Тестирование модели в эпоху.
 
     Параметры:
-    model (torch.nn.Module): Модель для оценки.
+    model (transformers.models.bert): Модель для оценки.
     test_loader (DataLoader): Загрузчик тестовых данных.
     device (torch.device): Устройство для выполнения расчетов.
 
@@ -101,15 +101,15 @@ def test_epoch(model, test_loader, device):
 
 def train_model(model, tokenizer, train_loader, test_loader, optimizer, scheduler, device, epochs=5, patience=2):
     """
-    Обучение модели с применением ранней остановки и сохранением наилучшей модели.
+    Обучение модели BertForSequenceClassification с применением ранней остановки и сохранением наилучшей модели.
 
     Параметры:
-    model (torch.nn.Module): Модель для обучения.
+    model (transformers.models.bert): Модель для обучения.
     tokenizer (transformers.PreTrainedTokenizer): Токенизатор для обработки текста.
     train_loader (DataLoader): Загрузчик данных для обучения.
     test_loader (DataLoader): Загрузчик данных для тестирования.
     optimizer (torch.optim.Optimizer): Оптимизатор для обновления весов.
-    scheduler (torch.optim.lr_scheduler._LRScheduler): Планировщик для обновления скорости обучения.
+    scheduler (torch.optim.lr_scheduler.LambdaLR): Планировщик для обновления скорости обучения.
     device (torch.device): Устройство для выполнения расчетов.
     epochs (int): Количество эпох обучения.
     patience (int): Количество эпох без улучшения, после которых происходит ранняя остановка.
@@ -161,12 +161,12 @@ def train_model(model, tokenizer, train_loader, test_loader, optimizer, schedule
     return model, history
 
 
-def evaluate_model(model, test_loader, device):
+def evaluate_model(model, test_loader, device, path):
     """
-    Оценка модели на тестовом наборе данных с выводом отчета о классификации.
+    Оценка модели на тестовом наборе данных с выводом отчета о классификации и матрицы ошибок.
 
     Параметры:
-    model (torch.nn.Module): Модель для оценки.
+    model (transformers.models.bert): Модель для оценки.
     test_loader (DataLoader): Загрузчик тестовых данных.
     device (torch.device): Устройство для выполнения расчетов.
 
@@ -194,4 +194,7 @@ def evaluate_model(model, test_loader, device):
             all_labels.extend(labels.cpu().numpy())  # Сохраняем истинные метки
 
     # Возвращаем отчет о классификации
-    return classification_report(all_labels, all_preds, target_names=["non-suicide", "suicide"])
+    print(classification_report(all_labels, all_preds, target_names=["non-suicide", "suicide"]))
+
+    # Строим матрицу ошибок
+    plot_confusion_matrix(all_labels, all_preds, path)

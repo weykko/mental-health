@@ -1,6 +1,8 @@
 import torch
 import re
 from matplotlib import pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 
 def preprocess_text(text):
@@ -131,5 +133,31 @@ def plot_training_history(history, path):
     ax2.set_title("Accuracy", fontsize=14)
 
     fig.tight_layout()
+    plt.savefig(path)
+    plt.show()
+
+
+def plot_confusion_matrix(all_labels, all_preds, path):
+    """
+    Построение матрицы ошибок (confusion matrix) и визуализация её с помощью тепловой карты.
+
+    Параметры:
+    all_labels (list or array-like): Истинные метки классов.
+    all_preds (list or array-like): Предсказанные метки классов.
+    path (str): Путь для сохранения изображения.
+
+    Возвращает:
+    None
+    """
+    cm = confusion_matrix(all_labels, all_preds)
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', square=True,
+                xticklabels=['non-suicidal', 'suicidal'],
+                yticklabels=['non-suicidal', 'suicidal'])
+    plt.xlabel('Predicted label')
+    plt.ylabel('True label')
+    plt.title('Confusion Matrix', fontsize=14)
+    plt.tight_layout()
     plt.savefig(path)
     plt.show()

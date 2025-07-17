@@ -1,6 +1,6 @@
-from sklearn.model_selection import train_test_split
 import torch
 from torch.optim import AdamW
+from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer, BertForSequenceClassification, get_linear_schedule_with_warmup
 import pandas as pd
 import numpy as np
@@ -63,14 +63,12 @@ df = pd.read_csv('./datasets/suicide_detection.csv')
 print(f"Размер датасета: {df.shape}")
 print(df.head())
 
-# Проверка распределения классов в датасете
-print("Распределение классов в датасете:")
+# Распределение классов в датасете
+print("\nРаспределение классов в датасете:")
 print(df['class'].value_counts())
-print(df['class'].value_counts(normalize=True) * 100)
 
 # Визуализация распределения классов
-class_counts = df['class'].value_counts()
-plot_class_distribution(class_counts, "plots/class_distribution.png")
+plot_class_distribution(df['class'].value_counts(), "plots/class_distribution.png")
 
 # Предобработка текста
 df['processed_text'] = df['text'].apply(preprocess_text)
@@ -95,15 +93,20 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=df['label']
 )
 
-# Параметры для дата лоадера
-max_length = 512
+# Распределение классов в обучающей выборке
+print("\nРаспределение классов в обучающей выборке:")
+print(y_train.value_counts())
+
+# Параметры для даталоадера
+max_length = 128
 batch_size = 64
 
-# BERT токенизатор
+# BERT токенизатор из transformers
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 # Загрузка данных в DataLoader
 train_loader, test_loader = get_depression_loaders(X_train, y_train, X_test, y_test, tokenizer, max_length, batch_size)
+print(type(y_train), type(X_train), type(tokenizer))
 
 # Инициализация модели BERT от Hugging Face (библиотека transformers) для классификации последовательностей
 model = BertForSequenceClassification.from_pretrained(
@@ -113,11 +116,13 @@ model = BertForSequenceClassification.from_pretrained(
     output_hidden_states=False
 ).to(device)
 
-# Определение оптимизатора
-optimizer = AdamW(model.parameters(), lr=2e-5, eps=1e-8)
-epochs = 3
+# Количество эпох обучения
+epochs = 5
 
-# Создание планировщика с прогревом
+# Создание оптимизатора AdamW
+optimizer = AdamW(model.parameters(), lr=2e-5, eps=1e-8)
+
+# Создание планировщика для регулировки скорости обучения
 scheduler = get_linear_schedule_with_warmup(
     optimizer,
     num_warmup_steps=0,
@@ -130,8 +135,8 @@ model, history = train_model(model, tokenizer, train_loader, test_loader, optimi
 # Визуализация истории обучения
 plot_training_history(history, "plots/train_history.png")
 
-# Оценка модели на тестовой выборке
-print(evaluate_model(model, test_loader, device))
+# Оценка модели на тестовой выборке (отчет о классификации, матрица ошибок)
+evaluate_model(model, test_loader, device, "plots/confusion_matrix.png")
 
 # Сохранение модели и токенизатора
 save_model(model, tokenizer, "/model/")

@@ -3,22 +3,26 @@ from pydantic import BaseModel
 
 from utils.model import DepressionPredictionModel
 
-# Инициализация FastAPI
+# Простое REST API приложение на FastAPI для тестирования модели
 app = FastAPI()
 
-model_load_path = "model"
+# Путь к модели
+model_load_path = "/model"
+
+# Загрузка обученной модели
 model = DepressionPredictionModel(model_load_path)
 
-# Модель для входных данных
+
 class PredictRequest(BaseModel):
     text: str
+
 
 @app.post("/predict")
 async def get_prediction(request: PredictRequest):
     text = request.text
-    probability = model.get_prediction(text)
+    probability = round(model.get_prediction(text), 3)
 
     return {
-        'prediction': 'Suicidal' if round(probability) == 1 else 'Non-suicidal',
-        'probability': probability if round(probability) == 1 else 1 - probability
+        "prediction": "suicidal" if probability >= 0.5 else "non-suicidal",
+        "probability": abs(probability - 0.5) + 0.5
     }

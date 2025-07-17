@@ -1,5 +1,5 @@
 import torch
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, accuracy_score
 from tqdm import tqdm
 
 from utils.utils import binary_accuracy, save_model, plot_confusion_matrix
@@ -192,6 +192,10 @@ def evaluate_model(model, test_loader, device, path):
             preds = torch.argmax(logits, dim=1)  # Получаем предсказания из логитов
             all_preds.extend(preds.cpu().numpy())  # Сохраняем предсказания
             all_labels.extend(labels.cpu().numpy())  # Сохраняем истинные метки
+
+    # Оценка точности модели
+    accuracy = accuracy_score(all_labels, all_preds)
+    print(f"Evaluate accuracy: {accuracy:.4f}\n")
 
     # Возвращаем отчет о классификации
     print(classification_report(all_labels, all_preds, target_names=["non-suicide", "suicide"]))

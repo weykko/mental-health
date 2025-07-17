@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 
 class DepressionDataset(Dataset):
@@ -32,3 +32,13 @@ class DepressionDataset(Dataset):
             'attention_mask': encoding['attention_mask'].flatten(),
             'label': torch.tensor(label, dtype=torch.long)
         }
+
+
+def get_depression_loaders(X_train, y_train, X_test, y_test, tokenizer, max_length, batch_size=64):
+    train_dataset = DepressionDataset(X_train, y_train, tokenizer, max_length)
+    test_dataset = DepressionDataset(X_test, y_test, tokenizer, max_length)
+
+    train_loader =  DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+
+    return train_loader, test_loader

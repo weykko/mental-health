@@ -1,6 +1,5 @@
 import torch
 import re
-
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from tqdm import tqdm
@@ -47,7 +46,21 @@ def save_model(model, tokenizer, output_dir):
 
     print(f"\nModel saved to {output_dir}")
 
+
 # Function to plot training and test results
+def plot_class_distribution(class_counts, path):
+    fig, ax = plt.subplots()
+
+    ax.bar(class_counts.index.values, class_counts.values, color=['#f76452', '#58db6e'], width=0.8)
+
+    ax.set_ylabel("Number of messages")
+    ax.set_title("Class Distribution")
+
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.show()
+
+
 def plot_training_results(history, path):
     epochs = len(history['train_losses'])
 
@@ -73,6 +86,7 @@ def plot_training_results(history, path):
     ax2.grid(True, linestyle='--', linewidth=0.5)
     ax2.set_xticks(range(1, epochs + 1))
     ax2.set_title("Accuracy", fontsize=14)
+
     fig.tight_layout()
     plt.savefig(path)
     plt.show()

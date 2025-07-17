@@ -78,7 +78,7 @@ def evaluate_epoch(model, test_loader, device):
     return total_loss / len(test_loader), total_acc / len(test_loader)
 
 
-def train_and_evaluate(model, tokenizer, train_loader, test_loader, optimizer, scheduler, device, epochs=5, patience=2):
+def train_and_evaluate_model(model, tokenizer, train_loader, test_loader, optimizer, scheduler, device, epochs=5, patience=2):
     train_losses, train_accs = [], []
     test_losses, test_accs = [], []
 

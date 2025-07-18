@@ -20,8 +20,7 @@ class PredictRequest(BaseModel):
 @app.post("/predict")
 async def get_prediction(request: PredictRequest):
     text = request.text
-    probability = round(model.get_prediction(text), 3)
-    print(probability)
+    probability = model.get_prediction(text)
 
     return {
         "prediction": "suicidal" if probability >= 0.5 else "non-suicidal",

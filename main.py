@@ -7,7 +7,7 @@ from utils.model import DepressionPredictionModel
 app = FastAPI()
 
 # Путь к модели
-model_load_path = "/model"
+model_load_path = "model"
 
 # Загрузка обученной модели
 model = DepressionPredictionModel(model_load_path)
@@ -21,8 +21,9 @@ class PredictRequest(BaseModel):
 async def get_prediction(request: PredictRequest):
     text = request.text
     probability = round(model.get_prediction(text), 3)
+    print(probability)
 
     return {
         "prediction": "suicidal" if probability >= 0.5 else "non-suicidal",
-        "probability": abs(probability - 0.5) + 0.5
+        "probability": round(abs(probability - 0.5) + 0.5, 3)
     }
